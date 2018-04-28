@@ -189,7 +189,8 @@ parseImports config o = Imports.step
             >>= parseEnum emptyListAligns (def Imports.emptyListAlign))
         <*> o A..:? "list_padding" A..!= (def Imports.listPadding)
         <*> o A..:? "separate_lists" A..!= (def Imports.separateLists)
-        <*> o A..:? "space_surround" A..!= (def Imports.spaceSurround))
+        <*> o A..:? "space_surround" A..!= (def Imports.spaceSurround)
+        <*> o A..:? "operator_before_func" A..!= (def Imports.operatorBeforeFunc))
   where
     def f = f Imports.defaultOptions
 
@@ -209,6 +210,7 @@ parseImports config o = Imports.step
     longListAligns =
         [ ("inline",             Imports.Inline)
         , ("new_line",           Imports.InlineWithBreak)
+        , ("new_line_leading",   Imports.InlineWithBreakLeadingSpaces)
         , ("new_line_multiline", Imports.InlineToMultiline)
         , ("multiline",          Imports.Multiline)
         ]

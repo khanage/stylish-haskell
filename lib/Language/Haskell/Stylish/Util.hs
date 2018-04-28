@@ -8,6 +8,7 @@ module Language.Haskell.Stylish.Util
     , infoPoints
     , wrap
     , wrapRest
+    , wrapRestNoSpace
 
     , withHead
     , withInit
@@ -85,6 +86,22 @@ wrap maxWidth leading ind = wrap' leading
     overflows ss str = length ss > maxWidth ||
         ((length ss + length str) >= maxWidth && ind + length str  <= maxWidth)
 
+wrapRestNoSpace ::
+  Int
+  -> Int
+  -> [String]
+  -> Lines
+wrapRestNoSpace maxWidth ind strings = reverse $ wrapRest' [] "" strings
+  where
+    wrapRest' ls ss []
+        | null ss = ls
+        | otherwise = ss:ls
+    wrapRest' ls ss (str:strs)
+        | null ss = wrapRest' ls (indent ind str) strs
+        | overflows ss str = wrapRest' (ss:ls) "" (str:strs)
+        | otherwise = wrapRest' ls (ss ++ str) strs
+
+    overflows ss str = (length ss + length str + 1) >= maxWidth
 
 --------------------------------------------------------------------------------
 wrapRest :: Int

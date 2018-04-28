@@ -61,6 +61,12 @@ steps:
       #   > import qualified Data.List      as List
       #   >     (concat, foldl, foldr, head, init, last, length)
       #
+      # - new_line_leading: Same as newline, but will have a leading comma.
+      #
+      # > import qualified Data.List
+      # >    ( Thing, Other, Anothor
+      # >    , andThen, these )
+      #
       # Default: after_alias
       list_align: after_alias
 
@@ -160,6 +166,9 @@ steps:
       #
       # Default: false
       space_surround: false
+
+      # Sorts imports by ( Type, (^.), func )
+      operator_before_func: false
 
   # Language pragmas
   - language_pragmas:

@@ -36,26 +36,28 @@ import           Language.Haskell.Stylish.Util
 
 --------------------------------------------------------------------------------
 data Options = Options
-    { importAlign    :: ImportAlign
-    , listAlign      :: ListAlign
-    , padModuleNames :: Bool
-    , longListAlign  :: LongListAlign
-    , emptyListAlign :: EmptyListAlign
-    , listPadding    :: ListPadding
-    , separateLists  :: Bool
-    , spaceSurround  :: Bool
+    { importAlign        :: ImportAlign
+    , listAlign          :: ListAlign
+    , padModuleNames     :: Bool
+    , longListAlign      :: LongListAlign
+    , emptyListAlign     :: EmptyListAlign
+    , listPadding        :: ListPadding
+    , separateLists      :: Bool
+    , spaceSurround      :: Bool
+    , operatorBeforeFunc :: Bool
     } deriving (Eq, Show)
 
 defaultOptions :: Options
 defaultOptions = Options
-    { importAlign    = Global
-    , listAlign      = AfterAlias
-    , padModuleNames = True
-    , longListAlign  = Inline
-    , emptyListAlign = Inherit
-    , listPadding    = LPConstant 4
-    , separateLists  = True
-    , spaceSurround  = False
+    { importAlign        = Global
+    , listAlign          = AfterAlias
+    , padModuleNames     = True
+    , longListAlign      = Inline
+    , emptyListAlign     = Inherit
+    , listPadding        = LPConstant 4
+    , separateLists      = True
+    , spaceSurround      = False
+    , operatorBeforeFunc = False
     }
 
 data ListPadding
@@ -84,6 +86,7 @@ data EmptyListAlign
 data LongListAlign
     = Inline
     | InlineWithBreak
+    | InlineWithBreakLeadingSpaces
     | InlineToMultiline
     | Multiline
     deriving (Eq, Show)
@@ -204,11 +207,13 @@ recomposeImportSpec (e, p) = case e of
 --------------------------------------------------------------------------------
 -- | The implementation is a bit hacky to get proper sorting for input specs:
 -- constructors first, followed by functions, and then operators.
-compareImportSpecs :: H.ImportSpec l -> H.ImportSpec l -> Ordering
-compareImportSpecs = comparing key
+compareImportSpecs :: Bool -> H.ImportSpec l -> H.ImportSpec l -> Ordering
+compareImportSpecs operatorFirst = comparing key
   where
     key :: H.ImportSpec l -> (Int, Bool, String)
-    key (H.IVar _ x)         = (1, isOperator x, nameToString x)
+    key (H.IVar _ x)
+      | operatorFirst = (1, (not $ isOperator x), nameToString x)
+      | otherwise     = (1, isOperator x, nameToString x)
     key (H.IAbs _ _ x)       = (0, False, nameToString x)
     key (H.IThingAll _ x)    = (0, False, nameToString x)
     key (H.IThingWith _ x _) = (0, False, nameToString x)
@@ -216,8 +221,8 @@ compareImportSpecs = comparing key
 
 --------------------------------------------------------------------------------
 -- | Sort the input spec list inside an 'H.ImportDecl'
-sortImportSpecs :: H.ImportDecl l -> H.ImportDecl l
-sortImportSpecs = modifyImportSpecs (sortBy compareImportSpecs)
+sortImportSpecs :: Bool -> H.ImportDecl l -> H.ImportDecl l
+sortImportSpecs = modifyImportSpecs . sortBy . compareImportSpecs
 
 
 --------------------------------------------------------------------------------
@@ -265,6 +270,8 @@ prettyImport columns Options{..} padQualified padName longest imp
         InlineWithBreak   -> longListWrapper inlineWrap inlineWithBreakWrap
         InlineToMultiline -> longListWrapper inlineWrap inlineToMultilineWrap
         Multiline         -> longListWrapper inlineWrap multilineWrap
+        InlineWithBreakLeadingSpaces ->
+          longListWrapper inlineWrapNoSpace inlineWithBreakWrapAndLeadingSpace
   where
     emptyImportSpec = Just (H.ImportSpecList () False [])
     -- "import" + space + qualifiedLength has space in it.
@@ -290,6 +297,12 @@ prettyImport columns Options{..} padQualified padName longest imp
         . withHead (("(" ++ maybeSpace) ++)
         . withLast (++ (maybeSpace ++ ")"))
 
+    inlineWrapNoSpace = inlineWrapper
+        $ mapSpecs
+        $ withInit (++ ",")
+        . withHead ("(" ++)
+        . withLast (++ ")")
+
     inlineWrapper = case listAlign of
         NewLine    -> (paddedNoSpecBase :) . wrapRest columns listPadding'
         WithAlias  -> wrap columns paddedBase (inlineBaseLength + 1)
@@ -302,6 +315,13 @@ prettyImport columns Options{..} padQualified padName longest imp
         $ withInit (++ ",")
         . withHead (("(" ++ maybeSpace) ++)
         . withLast (++ (maybeSpace ++ ")")))
+
+    inlineWithBreakWrapAndLeadingSpace =
+      paddedNoSpecBase : wrapRestNoSpace columns listPadding'
+      ( mapSpecs
+      $ withHead ("( " ++ )
+      . withLast (++ " )")
+      . withTail (", " ++))
 
     inlineToMultilineWrap
         | length inlineWithBreakWrap > 2
@@ -417,19 +437,19 @@ step columns = makeStep "Imports" . step' columns
 
 --------------------------------------------------------------------------------
 step' :: Int -> Options -> Lines -> Module -> Lines
-step' columns align ls (module', _) = applyChanges
+step' columns options@Options{..} ls (module', _) = applyChanges
     [ change block $ const $
-        prettyImportGroup columns align fileAlign longest importGroup
+        prettyImportGroup columns options fileAlign longest importGroup
     | (block, importGroup) <- groups
     ]
     ls
   where
-    imps    = map (sortImportSpecs . deduplicateImportSpecs) $
+    imps    = map (sortImportSpecs operatorBeforeFunc . deduplicateImportSpecs) $
               imports $ fmap linesFromSrcSpan module'
     longest = longestImport imps
     groups  = groupAdjacent [(H.ann i, i) | i <- imps]
 
-    fileAlign = case importAlign align of
+    fileAlign = case importAlign of
         File -> any H.importQualified imps
         _    -> False
 
